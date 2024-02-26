@@ -2,40 +2,138 @@ import {setCustomProperty} from './updateCustomProperty.js';
 
 const startScreen = document.getElementById('start-screen');
 
-class Sprite {
-    GRAVITY = 0.2;
+const GAME_WIDTH = 1024;
+const GAME_HEIGHT = 576;
+const BOTTOM_PADDING = 90;
 
-    constructor(canvas, context, {position, size, velocity, image}) {
+document.querySelectorAll('.game-box').forEach(e => {
+    e.style.width = `${GAME_WIDTH}px`;
+    e.style.height = `${GAME_HEIGHT}px`;
+})
+
+class Sprite {
+    direction = 'LEFT';
+    framesCurrent = 0;
+    framesElapsed = 0;
+    framesDuration = 10;
+
+    /**
+     * @coordinateBasis 'LEFT_TOP' | 'RIGHT_TOP' | 'LEFT_BOTTOM' | 'RIGHT_BOTTOM'
+     */
+    constructor(canvas, context, {position, coordinateBasis, size, image}) {
         this.canvas = canvas;
         this.context = context;
-        this.position = position;
+        this.position = position || {x: 0, y: 0};
+        this.coordinateBasis = coordinateBasis || 'LEFT_TOP';
         this.size = size;
-        this.velocity = velocity;
-        this.image = image;
+        this.image = new Image();
+        this.image.src = image.source;
+        this.framesCount = image.framesCount || 1;
+        this.imageDirection = image.direction || 'LEFT';
+        this.imageOffset = image.offset || {left: 0, top: 0, right: 0, bottom: 0};
+        this.imageScale = image.scale || 1;
     }
 
-    isJumping() {
-        return this.position.y + this.size.height < this.canvas.height;
+    width() {
+        return this.image.width / this.framesCount - this.imageOffset.left - this.imageOffset.right;
+    }
+
+    height() {
+        return this.image.height - this.imageOffset.top - this.imageOffset.bottom;
+    }
+
+    x() {
+        return this.coordinateBasis === 'RIGHT_BOTTOM' || this.coordinateBasis === 'RIGHT_TOP' ? this.canvas.width - this.position.x - this.width() * this.imageScale : this.position.x
+    }
+
+    y() {
+        return this.coordinateBasis === 'RIGHT_BOTTOM' || this.coordinateBasis === 'LEFT_BOTTOM' ? this.canvas.height - this.position.y - this.height() * this.imageScale : this.position.y
+    }
+
+    drawWidth() {
+        return this.size?.width || this.width() * this.imageScale;
+    }
+
+    drawHeight() {
+        return this.size?.height || this.height() * this.imageScale;
     }
 
     draw() {
-        this.context.fillStyle = 'red';
-        this.context.fillRect(this.position.x, this.position.y, 50, 100);
-        // this.context.drawImage(this.image, this.position.x, this.position.y, this.size.width, this.size.height);
+        const width = this.width();
+        const height = this.height();
+        const x = this.x();
+        const y = this.y();
+        const drawWidth = this.drawWidth();
+        const drawHeight = this.drawHeight();
+        const reversed = this.direction !== this.imageDirection;
+
+        if (this.image.src.indexOf('samuraiMack') !== -1 || this.image.src.indexOf('kenji') !== -1) {
+            this.context.fillStyle = 'black';
+            this.context.fillRect(x, y, drawWidth, drawHeight);
+            // console.log('draw', { coordinateBasis: this.coordinateBasis, direction: this.direction, width, height, x, y, drawWidth, drawHeight, reversed });
+        }
+
+        if (reversed) {
+            this.context.save();
+            this.context.scale(-1, 1);
+        }
+
+        this.context.drawImage(
+            this.image,
+            this.image.width / this.framesCount * this.framesCurrent + this.imageOffset.left,
+            this.imageOffset.top,
+            width,
+            height,
+            reversed ? -x : x,
+            y,
+            reversed ? -drawWidth : drawWidth,
+            drawHeight
+        );
+
+        if (reversed) {
+            this.context.restore();
+        }
+    }
+
+    update() {
+        this.draw();
+        this.framesElapsed += 1;
+
+        if (this.framesElapsed % this.framesDuration) return;
+        this.framesElapsed = 0;
+        this.framesCurrent = (this.framesCurrent + 1) % this.framesCount;
+    }
+}
+
+class MovingSprite extends Sprite {
+    GRAVITY = 0.25;
+    velocity = {x: 0, y: 0};
+
+    constructor(canvas, context, {position, coordinateBasis, size, image}) {
+        super(canvas, context, {position, coordinateBasis, size, image});
+        this.BOTTOM_THRESHOLD = this.canvas.height - BOTTOM_PADDING;
+    }
+
+    isJumping() {
+        return this.position.y + this.drawHeight() < this.BOTTOM_THRESHOLD;
     }
 
     update() {
         this.draw();
 
-        if (this.position.y + this.size.height + this.velocity.y > this.canvas.height) {
+        const width = this.width() * this.imageScale;
+        const height = this.height() * this.imageScale;
+
+        if (this.position.y + height + this.velocity.y > this.BOTTOM_THRESHOLD) {
+            // console.log('stop jumping', this.position.y, height, this.velocity.y, this.BOTTOM_THRESHOLD)
             this.velocity.x = 0;
             this.velocity.y = 0;
-            this.position.y = this.canvas.height - this.size.height;
+            this.position.y = this.BOTTOM_THRESHOLD - height;
         } else if (this.isJumping()) {
             this.velocity.y += this.GRAVITY;
         }
 
-        if (this.position.x + this.size.width + this.velocity.x > this.canvas.width || this.position.x + this.velocity.x < 0) {
+        if (this.position.x + width + this.velocity.x > this.canvas.width || this.position.x + this.velocity.x < 0) {
             this.velocity.x = 0;
         }
 
@@ -44,24 +142,33 @@ class Sprite {
     }
 }
 
-class Character extends Sprite {
+class Character extends MovingSprite {
     ATTACK_DELAY = 100;
     ATTACK_KEEP_MS = 1000;
     ATTACK_DAMAGE = 20;
     FULL_HEALTH = 100;
 
-    direction = 'right';
     attackedAt = null;
     lastAttackedAt = null;
     health = this.FULL_HEALTH;
     lastGetAttackId = null; // attackedAt
 
-    /*
-     * @attackRect function ({position, size, velocity, direction}) => {x, y, width, height}
+    /**
+     * @attackRect function ({position, scale, velocity, direction}) => {x, y, width, height}
      */
-    constructor(canvas, context, {name, position, size, velocity, image, attackRect, healthIndicator}) {
-        super(canvas, context, {position, size, velocity, image});
+    constructor(canvas, context, {
+        name,
+        position,
+        coordinateBasis,
+        size,
+        image,
+        hitRect,
+        attackRect,
+        healthIndicator
+    }) {
+        super(canvas, context, {position, coordinateBasis, size, image});
         this.name = name;
+        this.hitRect = hitRect;
         this.attackRect = attackRect;
         this.healthIndicator = healthIndicator;
     }
@@ -146,18 +253,17 @@ class Character extends Sprite {
         super.update();
 
         if (this.enemy) {
-            if (this.enemy.position.x > this.position.x) {
-                this.direction = 'right';
-            } else {
-                this.direction = 'left';
-            }
+            this.direction = this.enemy.position.x > this.position.x ? 'RIGHT' : 'LEFT';
 
             if (this.isAttacking()) {
+                const hitRect = this.enemy.hitRect(this.enemy);
                 const attackRect = this.attackRect(this);
-                if (attackRect.x < this.enemy.position.x + this.enemy.size.width
-                    && attackRect.x + attackRect.width > this.enemy.position.x
-                    && attackRect.y < this.enemy.position.y + this.enemy.size.height
-                    && attackRect.y + attackRect.height > this.enemy.position.y) {
+
+                // console.log('attack', attackRect, hitRect)
+                if (attackRect.x < hitRect.x + hitRect.width
+                    && attackRect.x + attackRect.width > hitRect.x
+                    && attackRect.y < hitRect.y + hitRect.height
+                    && attackRect.y + attackRect.height > hitRect.y) {
                     // console.log(`hit ${this.name} > ${this.enemy.name}`);
                     this.enemy.getDamage(this.lastAttackedAt, this.ATTACK_DAMAGE);
                 }
@@ -175,36 +281,16 @@ class Character extends Sprite {
 }
 
 class Game {
-    TIME_LIMIT = 10;
+    TIME_LIMIT = 100;
     startedAt = null;
     timer = null;
-
-    getAttackRect = ({position, size, direction}) => {
-        if (direction === 'right') {
-            return {
-                x: position.x + size.width,
-                y: position.y + size.height / 4,
-                width: 100,
-                height: size.height / 4
-            };
-        } else {
-            return {
-                x: position.x - 100,
-                y: position.y + size.height / 4,
-                width: 100,
-                height: size.height / 4
-            };
-        }
-    }
 
     constructor(timerElement) {
         this.timerElement = timerElement;
         this.canvas = document.getElementById('canvas');
         this.context = this.canvas.getContext('2d');
-        this.canvas.width = 1024;
-        this.canvas.height = 576;
-        // this.context.fillStyle = 'black';
-        // this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.canvas.width = GAME_WIDTH;
+        this.canvas.height = GAME_HEIGHT;
 
         window.addEventListener('keydown', event => {
             if (event.code === 'Space') {
@@ -212,6 +298,29 @@ class Game {
                     this.start();
             }
         });
+    }
+
+    getHitRect = (character) => {
+        const width = character.drawWidth();
+        const height = character.drawHeight();
+        return {
+            x: character.x() + width / 4,
+            y: character.y() + height / 4,
+            width: width / 2,
+            height: height / 2
+        };
+    }
+
+    getAttackRect = (character) => {
+        const attachRange = 100;
+        const width = character.drawWidth();
+        const height = character.drawHeight();
+        return {
+            x: character.x() + (character.direction === 'RIGHT' ? width : -attachRange),
+            y: character.y() + height / 4,
+            width: attachRange,
+            height: height / 4
+        };
     }
 
     keydownEvents = (event) => {
@@ -235,26 +344,53 @@ class Game {
     }
 
     setup() {
+        this.background = new Sprite(this.canvas, this.context, {
+            size: {width: this.canvas.width, height: this.canvas.height},
+            image: {source: './images/background.png',},
+        });
+        this.shop = new Sprite(this.canvas, this.context, {
+            coordinateBasis: 'RIGHT_BOTTOM',
+            position: {x: 100, y: BOTTOM_PADDING},
+            image: {
+                source: './images/shop.png',
+                scale: 2.5,
+                framesCount: 6,
+                offset: {x: 0, y: 0}
+            },
+        });
         this.player = new Character(this.canvas, this.context, {
             name: 'player',
-            position: {x: 100, y: 100},
-            size: {width: 50, height: 100},
-            velocity: {x: 0, y: 0},
-            image: document.getElementById('player'),
+            position: {x: this.canvas.width / 4 - 70 / 2, y: 50},
+            scale: 2,
+            image: {
+                direction: 'RIGHT',
+                source: './images/samuraiMack/Idle.png',
+                scale: 2,
+                framesCount: 8,
+                offset: {left: 70, top: 70, right: 80, bottom: 75}
+            },
+            hitRect: this.getHitRect,
             attackRect: this.getAttackRect,
             healthIndicator: document.getElementById('player-health')
         });
         this.enemy = new Character(this.canvas, this.context, {
             name: 'enemy',
-            position: {x: 400, y: 100},
-            size: {width: 50, height: 100},
-            velocity: {x: 0, y: 0},
-            image: document.getElementById('player'),
+            position: {x: this.canvas.width / 4 * 3 - 70 / 2, y: 50},
+            scale: 2,
+            image: {
+                direction: 'LEFT',
+                source: './images/kenji/Idle.png',
+                scale: 2,
+                framesCount: 4,
+                offset: {left: 80, top: 75, right: 75, bottom: 70}
+            },
+            hitRect: this.getHitRect,
             attackRect: this.getAttackRect,
             healthIndicator: document.getElementById('enemy-health')
         });
         this.player.setEnemy(this.enemy);
         this.enemy.setEnemy(this.player);
+        this.background.draw();
     }
 
     setupKeyEvents() {
@@ -306,19 +442,22 @@ class Game {
         startScreen.classList.remove('hidden');
         this.clearKeyEvents();
         this.startedAt = null;
+        if (this.timer) clearInterval(this.timer);
         this.timer = null;
         this.timerElement.innerText = '';
         console.log('end game');
     }
 
     isFinished() {
-        return this.player.health <= 0 || this.enemy.health <= 0;
+        return this.player.health <= 0 || (this.enemy && this.enemy.health <= 0);
     }
 
     animate() {
         if (!this.startedAt) return;
-        // this.context.fillStyle = 'black';
+
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.background.update();
+        this.shop.update();
         this.player.update();
         this.enemy.update();
         window.requestAnimationFrame(this.animation);
@@ -330,4 +469,3 @@ class Game {
 }
 
 window.game = new Game(document.getElementById('timer'));
-// game.start();
