@@ -68,8 +68,8 @@ class Sprite {
         const reversed = this.direction !== this.imageDirection;
 
         if (this.image.src.indexOf('samuraiMack') !== -1 || this.image.src.indexOf('kenji') !== -1) {
-            this.context.fillStyle = 'black';
-            this.context.fillRect(x, y, drawWidth, drawHeight);
+            // this.context.fillStyle = 'black';
+            // this.context.fillRect(x, y, drawWidth, drawHeight);
             // console.log('draw', { coordinateBasis: this.coordinateBasis, direction: this.direction, width, height, x, y, drawWidth, drawHeight, reversed });
         }
 
@@ -355,7 +355,6 @@ class Game {
                 source: './images/shop.png',
                 scale: 2.5,
                 framesCount: 6,
-                offset: {x: 0, y: 0}
             },
         });
         this.player = new Character(this.canvas, this.context, {
