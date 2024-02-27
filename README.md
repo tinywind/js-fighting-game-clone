@@ -1,6 +1,8 @@
-### refs
-- https://www.youtube.com/watch?v=vyqbNFMDRGQ
+# suikagame-clone
+nodejs, vite, matterjs
 
-### learning points
-- canvas
-- adjust frame rate
+# references
+- https://github.com/paulantoine2/suika
+- https://www.youtube.com/watch?v=LZvEDigv0Ww
+- https://brm.io/matter-js/
+- 
