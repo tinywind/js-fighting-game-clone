@@ -4,7 +4,7 @@ const startScreen = document.getElementById('start-screen');
 
 const GAME_WIDTH = 1024;
 const GAME_HEIGHT = 576;
-const BOTTOM_PADDING = 90;
+const BOTTOM_PADDING = 85;
 
 document.querySelectorAll('.game-box').forEach(e => {
     e.style.width = `${GAME_WIDTH}px`;
@@ -27,6 +27,10 @@ class Sprite {
         this.coordinateBasis = coordinateBasis || 'LEFT_TOP';
         this.size = size;
         this.image = new Image();
+        this.setImage(image);
+    }
+
+    setImage(image) {
         this.image.src = image.source;
         this.framesCount = image.framesCount || 1;
         this.imageDirection = image.direction || 'LEFT';
@@ -67,10 +71,23 @@ class Sprite {
         const drawHeight = this.drawHeight();
         const reversed = this.direction !== this.imageDirection;
 
-        if (this.image.src.indexOf('samuraiMack') !== -1 || this.image.src.indexOf('kenji') !== -1) {
+        if (
+            this.image.src.indexOf('samuraiMack') !== -1
+            // || this.image.src.indexOf('kenji') !== -1
+        ) {
             // this.context.fillStyle = 'black';
             // this.context.fillRect(x, y, drawWidth, drawHeight);
-            // console.log('draw', { coordinateBasis: this.coordinateBasis, direction: this.direction, width, height, x, y, drawWidth, drawHeight, reversed });
+            /*console.log('draw', {
+                coordinateBasis: this.coordinateBasis,
+                direction: this.direction,
+                width,
+                height,
+                x,
+                y,
+                drawWidth,
+                drawHeight,
+                reversed
+            });*/
         }
 
         if (reversed) {
@@ -97,61 +114,27 @@ class Sprite {
 
     update() {
         this.draw();
-        this.framesElapsed += 1;
 
+        this.framesElapsed += 1;
         if (this.framesElapsed % this.framesDuration) return;
         this.framesElapsed = 0;
         this.framesCurrent = (this.framesCurrent + 1) % this.framesCount;
     }
 }
 
-class MovingSprite extends Sprite {
+class Character {
     GRAVITY = 0.25;
-    velocity = {x: 0, y: 0};
-
-    constructor(canvas, context, {position, coordinateBasis, size, image}) {
-        super(canvas, context, {position, coordinateBasis, size, image});
-        this.BOTTOM_THRESHOLD = this.canvas.height - BOTTOM_PADDING;
-    }
-
-    isJumping() {
-        return this.position.y + this.drawHeight() < this.BOTTOM_THRESHOLD;
-    }
-
-    update() {
-        this.draw();
-
-        const width = this.width() * this.imageScale;
-        const height = this.height() * this.imageScale;
-
-        if (this.position.y + height + this.velocity.y > this.BOTTOM_THRESHOLD) {
-            // console.log('stop jumping', this.position.y, height, this.velocity.y, this.BOTTOM_THRESHOLD)
-            this.velocity.x = 0;
-            this.velocity.y = 0;
-            this.position.y = this.BOTTOM_THRESHOLD - height;
-        } else if (this.isJumping()) {
-            this.velocity.y += this.GRAVITY;
-        }
-
-        if (this.position.x + width + this.velocity.x > this.canvas.width || this.position.x + this.velocity.x < 0) {
-            this.velocity.x = 0;
-        }
-
-        this.position.x += this.velocity.x;
-        this.position.y += this.velocity.y;
-    }
-}
-
-class Character extends MovingSprite {
     ATTACK_DELAY = 100;
     ATTACK_KEEP_MS = 1000;
     ATTACK_DAMAGE = 20;
     FULL_HEALTH = 100;
 
+    velocity = {x: 0, y: 0};
     attackedAt = null;
     lastAttackedAt = null;
     health = this.FULL_HEALTH;
     lastGetAttackId = null; // attackedAt
+    state = 'IDLE';
 
     /**
      * @attackRect function ({position, scale, velocity, direction}) => {x, y, width, height}
@@ -160,42 +143,97 @@ class Character extends MovingSprite {
         name,
         position,
         coordinateBasis,
-        size,
-        image,
+        idleImage,
+        jumpImage,
+        fallImage,
+        moveImage,
+        hitImage,
+        attackImages,
         hitRect,
         attackRect,
-        healthIndicator
+        healthIndicator,
     }) {
-        super(canvas, context, {position, coordinateBasis, size, image});
+        this.canvas = canvas;
+        this.context = context;
         this.name = name;
         this.hitRect = hitRect;
         this.attackRect = attackRect;
         this.healthIndicator = healthIndicator;
+        this.images = {
+            'IDLE': [idleImage],
+            'JUMP': [jumpImage],
+            'FALL': [fallImage],
+            'MOVE': [moveImage],
+            'HIT': [hitImage],
+            'ATTACK': attackImages,
+        }
+        this.sprite = new Sprite(this.canvas, this.context, {position, coordinateBasis, image: this.getStateImage()});
+
+        this.BOTTOM_THRESHOLD = this.canvas.height - BOTTOM_PADDING;
+    }
+
+    setState(state) {
+        const x = this.sprite.x();
+        const y = this.sprite.y();
+        const drawWidth = this.sprite.drawWidth();
+        const drawHeight = this.sprite.drawHeight();
+        const preState = this.state;
+
+        this.state = state;
+        this.sprite.setImage(this.getStateImage());
+
+        const changedX = this.sprite.x();
+        const changedY = this.sprite.x();
+        const changedDrawWidth = this.sprite.drawWidth();
+        const changedDrawHeight = this.sprite.drawHeight();
+
+        if (drawWidth !== changedDrawWidth || drawHeight !== changedDrawHeight) {
+            console.log(
+                'change state',
+                {state: preState, x, y, width: drawWidth, height: drawHeight},
+                {state, x: changedX, y: changedY, width: changedDrawWidth, height: changedDrawHeight}
+            );
+
+            if (drawHeight !== changedDrawHeight) this.sprite.position.y += (drawHeight - changedDrawHeight);
+            if (drawWidth !== changedDrawWidth && this.sprite.direction !== this.sprite.imageDirection) this.sprite.position.x += (drawWidth - changedDrawWidth);
+        }
+    }
+
+    getStateImage(index) {
+        return this.images[this.state][index || 0];
     }
 
     setEnemy(enemy) {
         this.enemy = enemy;
     }
 
+    isJumping() {
+        return this.sprite.position.y + this.sprite.drawHeight() < this.BOTTOM_THRESHOLD;
+    }
+
     jump() {
         if (this.isJumping()) return;
         this.velocity.y = -10;
+        this.setState('JUMP');
         this.finishAttack();
     }
 
     moveRight() {
         if (this.isJumping()) return;
         this.velocity.x = 5;
+        this.setState('MOVE');
     }
 
     moveLeft() {
         if (this.isJumping()) return;
         this.velocity.x = -5;
+        this.setState('MOVE');
     }
 
     stopMove() {
         if (this.isJumping()) return;
         this.velocity.x = 0;
+        this.setState('IDLE');
     }
 
     isTriggeredAttack() {
@@ -215,11 +253,15 @@ class Character extends MovingSprite {
 
     finishAttack() {
         this.attackedAt = null;
+        if (this.isJumping()) this.setState(this.velocity.y > 0 ? 'FALL' : 'JUMP');
+        else if (this.velocity.x) this.setState('MOVE');
+        else this.setState('IDLE');
     }
 
     attack() {
         if (this.isTriggeredAttack()) return;
         this.lastAttackedAt = this.attackedAt = Date.now();
+        this.setState('ATTACK');
     }
 
     getDamage(attackId, damage) {
@@ -237,23 +279,36 @@ class Character extends MovingSprite {
         }
     }
 
-    draw() {
-        super.draw();
-
-        if (this.isAttacking()) {
-            this.context.fillStyle = 'blue';
-            const attackRect = this.attackRect(this);
-            this.context.fillRect(attackRect.x, attackRect.y, attackRect.width, attackRect.height);
-        }
-    }
-
     update() {
-        const isJumping = this.isJumping();
+        this.sprite.update();
 
-        super.update();
+        const isJumping = this.isJumping();
+        const width = this.sprite.width() * this.sprite.imageScale;
+        const height = this.sprite.height() * this.sprite.imageScale;
+
+        if (this.sprite.position.y + height + this.velocity.y > this.BOTTOM_THRESHOLD) {
+            // console.log('stop jumping', this.position.y, height, this.velocity.y, this.BOTTOM_THRESHOLD)
+            this.velocity.x = 0;
+            this.velocity.y = 0;
+            this.sprite.position.y = this.BOTTOM_THRESHOLD - height;
+            this.setState('IDLE');
+        } else if (this.isJumping()) {
+            this.velocity.y += this.GRAVITY;
+            if (!this.isTriggeredAttack()) this.setState(this.velocity.y > 0 ? 'FALL' : 'JUMP');
+        }
+
+        if (this.sprite.position.x + width + this.velocity.x > this.canvas.width || this.sprite.position.x + this.velocity.x < 0) {
+            this.velocity.x = 0;
+            this.setState('IDLE');
+        }
+
+        this.sprite.position.x += this.velocity.x;
+        this.sprite.position.y += this.velocity.y;
 
         if (this.enemy) {
-            this.direction = this.enemy.position.x > this.position.x ? 'RIGHT' : 'LEFT';
+            // TODO: 케릭터의 중심을 이미지의 x,y가 아니라 지정된 x,y로 변경하고(image 별로 설정하고), 설정된 x,y를 이미지를 draw하고, direction을 계산한다.
+            // TODO: 변경된 x,y를 기준으로 화면밖으로 나가지 않도록 처리한다.
+            this.sprite.direction = this.enemy.sprite.position.x > this.sprite.position.x ? 'RIGHT' : 'LEFT';
 
             if (this.isAttacking()) {
                 const hitRect = this.enemy.hitRect(this.enemy);
@@ -270,11 +325,10 @@ class Character extends MovingSprite {
             }
         }
 
-        if (this.isFinishedAttack()) {
-            this.finishAttack();
-        }
-
-        if (isJumping && !this.isJumping()) {
+        if (
+            this.isFinishedAttack()
+            || (isJumping && !this.isJumping())
+        ) {
             this.finishAttack();
         }
     }
@@ -301,11 +355,11 @@ class Game {
     }
 
     getHitRect = (character) => {
-        const width = character.drawWidth();
-        const height = character.drawHeight();
+        const width = character.sprite.drawWidth();
+        const height = character.sprite.drawHeight();
         return {
-            x: character.x() + width / 4,
-            y: character.y() + height / 4,
+            x: character.sprite.x() + width / 4,
+            y: character.sprite.y() + height / 4,
             width: width / 2,
             height: height / 2
         };
@@ -313,11 +367,11 @@ class Game {
 
     getAttackRect = (character) => {
         const attachRange = 100;
-        const width = character.drawWidth();
-        const height = character.drawHeight();
+        const width = character.sprite.drawWidth();
+        const height = character.sprite.drawHeight();
         return {
-            x: character.x() + (character.direction === 'RIGHT' ? width : -attachRange),
-            y: character.y() + height / 4,
+            x: character.sprite.x() + (character.sprite.direction === 'RIGHT' ? width : -attachRange),
+            y: character.sprite.y() + height / 4,
             width: attachRange,
             height: height / 4
         };
@@ -361,13 +415,57 @@ class Game {
             name: 'player',
             position: {x: this.canvas.width / 4 - 70 / 2, y: 50},
             scale: 2,
-            image: {
+            idleImage: {
                 direction: 'RIGHT',
                 source: './images/samuraiMack/Idle.png',
                 scale: 2,
                 framesCount: 8,
                 offset: {left: 70, top: 70, right: 80, bottom: 75}
             },
+            jumpImage: {
+                direction: 'RIGHT',
+                source: './images/samuraiMack/Jump.png',
+                scale: 2,
+                framesCount: 2,
+                offset: {left: 70, top: 70, right: 80, bottom: 75}
+            },
+            fallImage: {
+                direction: 'RIGHT',
+                source: './images/samuraiMack/Fall.png',
+                scale: 2,
+                framesCount: 2,
+                offset: {left: 70, top: 70, right: 80, bottom: 75}
+            },
+            moveImage: {
+                direction: 'RIGHT',
+                source: './images/samuraiMack/Run.png',
+                scale: 2,
+                framesCount: 8,
+                offset: {left: 70, top: 70, right: 80, bottom: 75}
+            },
+            hitImage: {
+                direction: 'RIGHT',
+                source: './images/samuraiMack/Take Hit - white silhouette.png',
+                scale: 2,
+                framesCount: 4,
+                offset: {left: 70, top: 70, right: 80, bottom: 75}
+            },
+            attackImages: [
+                {
+                    direction: 'RIGHT',
+                    source: './images/samuraiMack/Attack1.png',
+                    scale: 2,
+                    framesCount: 6,
+                    offset: {left: 70, top: 20, right: 0, bottom: 75}
+                },
+                {
+                    direction: 'RIGHT',
+                    source: './images/samuraiMack/Attack2.png',
+                    scale: 2,
+                    framesCount: 6,
+                    offset: {left: 70, top: 70, right: 0, bottom: 75}
+                },
+            ],
             hitRect: this.getHitRect,
             attackRect: this.getAttackRect,
             healthIndicator: document.getElementById('player-health')
@@ -376,13 +474,57 @@ class Game {
             name: 'enemy',
             position: {x: this.canvas.width / 4 * 3 - 70 / 2, y: 50},
             scale: 2,
-            image: {
+            idleImage: {
                 direction: 'LEFT',
                 source: './images/kenji/Idle.png',
                 scale: 2,
                 framesCount: 4,
                 offset: {left: 80, top: 75, right: 75, bottom: 70}
             },
+            jumpImage: {
+                direction: 'LEFT',
+                source: './images/kenji/Jump.png',
+                scale: 2,
+                framesCount: 2,
+                offset: {left: 80, top: 75, right: 75, bottom: 70}
+            },
+            fallImage: {
+                direction: 'LEFT',
+                source: './images/kenji/Fall.png',
+                scale: 2,
+                framesCount: 2,
+                offset: {left: 80, top: 75, right: 75, bottom: 70}
+            },
+            moveImage: {
+                direction: 'LEFT',
+                source: './images/kenji/Run.png',
+                scale: 2,
+                framesCount: 8,
+                offset: {left: 80, top: 75, right: 75, bottom: 70}
+            },
+            hitImage: {
+                direction: 'LEFT',
+                source: './images/kenji/Take Hit.png',
+                scale: 2,
+                framesCount: 3,
+                offset: {left: 80, top: 75, right: 75, bottom: 70}
+            },
+            attackImages: [
+                {
+                    direction: 'LEFT',
+                    source: './images/kenji/Attack1.png',
+                    scale: 2,
+                    framesCount: 4,
+                    offset: {left: 80, top: 75, right: 75, bottom: 70}
+                },
+                {
+                    direction: 'LEFT',
+                    source: './images/kenji/Attack2.png',
+                    scale: 2,
+                    framesCount: 4,
+                    offset: {left: 80, top: 75, right: 75, bottom: 70}
+                },
+            ],
             hitRect: this.getHitRect,
             attackRect: this.getAttackRect,
             healthIndicator: document.getElementById('enemy-health')
