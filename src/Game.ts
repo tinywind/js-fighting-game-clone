@@ -3,7 +3,10 @@ import Sprite from './Sprite';
 import { set as setProperty } from './properties';
 import { Character } from './Character';
 import { CoordinateBasis } from './enums/CoordinateBasis';
-import { Direction } from './enums/Direction';
+import { create as createPlayer } from './config/player';
+import { create as createEnemy } from './config/enemy';
+import { create as createBackground } from './config/background';
+import { create as createShop } from './config/shop';
 
 type Elements = {
   indicatorContainer?: HTMLElement;
@@ -57,392 +60,26 @@ export class Game {
     this.canvas = canvas;
     this.context = context;
 
+    this.background = createBackground(this.canvas, this.context);
+    this.shop = createShop(this.canvas, this.context);
+
+    this.animation = this.animate.bind(this);
+    this.animationBackground = this.animateBackground.bind(this);
+
+    const effector = this.getRandomCameraMovementEffector();
+    this.background.effector = effector;
+    this.shop.effector = effector;
+
     window.addEventListener('keydown', event => {
       if (event.code === 'Space') {
         if (!this.startedAt) this.start();
       }
     });
-
-    this.background = new Sprite(this.canvas, this.context, {
-      imageAttr: {
-        source: './images/background.png',
-        size: { width: this.canvas.width, height: this.canvas.height },
-      },
-    });
-    this.shop = new Sprite(this.canvas, this.context, {
-      coordinateBasis: CoordinateBasis.RIGHT_BOTTOM,
-      position: { x: 100, y: 95 },
-      imageAttr: {
-        source: './images/shop.png',
-        scale: 2.5,
-        framesCount: 6,
-      },
-    });
-
-    this.animation = this.animate.bind(this);
-    this.animationBackground = this.animateBackground.bind(this);
   }
 
   setup() {
-    this.player = new Character(
-      this.canvas,
-      this.context,
-      {
-        name: 'player',
-        position: { x: this.canvas.width / 4 - 70 / 2, y: 50 },
-        healthIndicator: this.elements.playerHealth,
-      },
-      {
-        IDLE: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Idle.png',
-            scale: 2,
-            framesCount: 8,
-            repeatAnimation: 0,
-            // offset: { left: 70, top: 70, right: 80, bottom: 75 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        JUMP: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Jump.png',
-            scale: 2,
-            framesCount: 2,
-            repeatAnimation: 1,
-            // offset: { left: 70, top: 70, right: 80, bottom: 75 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        FALL: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Fall.png',
-            scale: 2,
-            framesCount: 2,
-            repeatAnimation: 1,
-            // offset: { left: 70, top: 70, right: 80, bottom: 75 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        MOVE: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Run.png',
-            scale: 2,
-            framesCount: 8,
-            repeatAnimation: 0,
-            // offset: { left: 70, top: 70, right: 80, bottom: 75 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        HIT: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Take Hit - white silhouette.png',
-            scale: 2,
-            framesCount: 4,
-            repeatAnimation: 1,
-            // offset: { left: 70, top: 70, right: 80, bottom: 75 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        ATTACK: [
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Attack1.png',
-            scale: 2,
-            framesCount: 6,
-            repeatAnimation: 1,
-            animationDuration: 500,
-            // offset: { left: 70, top: 20, right: 0, bottom: 75 },
-            getHitArea: ({ position, framesCurrent, sprite }) => {
-              const body = {
-                left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                top: position.y - 40,
-                right: position.x + 20 * (sprite.reversed() ? -1 : 1),
-                bottom: position.y + 30,
-              };
-              if (framesCurrent === 0)
-                return {
-                  ...body,
-                  left: body.left - 10 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 10 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 1)
-                return {
-                  ...body,
-                  left: body.left - 15 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 10 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 2)
-                return {
-                  ...body,
-                  left: body.left - 5 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 5 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 3) return body;
-              if (framesCurrent === 4)
-                return {
-                  ...body,
-                  left: body.left + 10 * (sprite.reversed() ? -1 : 1),
-                  right: body.right + 40 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 5)
-                return {
-                  ...body,
-                  left: body.left + 20 * (sprite.reversed() ? -1 : 1),
-                  right: body.right + 40 * (sprite.reversed() ? -1 : 1),
-                };
-            },
-            getAttackArea: ({ position, framesCurrent, sprite }) => {
-              if (framesCurrent === 4)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 170 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 90,
-                  bottom: position.y + 30,
-                };
-              if (framesCurrent === 5)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 170 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 90,
-                  bottom: position.y - 30,
-                };
-            },
-          },
-          {
-            direction: Direction.RIGHT,
-            source: './images/samuraiMack/Attack2.png',
-            scale: 2,
-            framesCount: 6,
-            repeatAnimation: 1,
-            // offset: { left: 70, top: 70, right: 0, bottom: 75 },
-            getHitArea: ({ position, framesCurrent, sprite }) => {
-              const body = {
-                left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                top: position.y - 40,
-                right: position.x + 20 * (sprite.reversed() ? -1 : 1),
-                bottom: position.y + 30,
-              };
-              if (framesCurrent === 0)
-                return {
-                  ...body,
-                  left: body.left - 10 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 10 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 1)
-                return {
-                  ...body,
-                  left: body.left - 15 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 10 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 2)
-                return {
-                  ...body,
-                  left: body.left - 5 * (sprite.reversed() ? -1 : 1),
-                  right: body.right - 5 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 4)
-                return {
-                  ...body,
-                  left: body.left + 10 * (sprite.reversed() ? -1 : 1),
-                  right: body.right + 30 * (sprite.reversed() ? -1 : 1),
-                };
-              if (framesCurrent === 5)
-                return {
-                  ...body,
-                  left: body.left + 20 * (sprite.reversed() ? -1 : 1),
-                  right: body.right + 40 * (sprite.reversed() ? -1 : 1),
-                };
-              return body;
-            },
-            getAttackArea: ({ position, framesCurrent, sprite }) => {
-              if (framesCurrent === 4)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 170 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 90,
-                  bottom: position.y + 30,
-                };
-              if (framesCurrent === 5)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 170 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 40,
-                  bottom: position.y + 10,
-                };
-            },
-          },
-        ],
-      },
-    );
-    this.enemy = new Character(
-      this.canvas,
-      this.context,
-      {
-        name: 'enemy',
-        position: { x: (this.canvas.width / 4) * 3 - 70 / 2, y: 50 },
-        healthIndicator: this.elements.enemyHealth,
-      },
-      {
-        IDLE: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Idle.png',
-            scale: 2,
-            framesCount: 4,
-            repeatAnimation: 0,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        JUMP: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Jump.png',
-            scale: 2,
-            framesCount: 2,
-            repeatAnimation: 1,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        FALL: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Fall.png',
-            scale: 2,
-            framesCount: 2,
-            repeatAnimation: 1,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        MOVE: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Run.png',
-            scale: 2,
-            framesCount: 8,
-            repeatAnimation: 0,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        HIT: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Take Hit.png',
-            scale: 2,
-            framesCount: 3,
-            repeatAnimation: 1,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-          },
-        ],
-        ATTACK: [
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Attack1.png',
-            scale: 2,
-            framesCount: 4,
-            repeatAnimation: 1,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-            getAttackArea: ({ position, framesCurrent, sprite }) => {
-              if (framesCurrent === 1)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 140 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 90,
-                  bottom: position.y + 30,
-                };
-            },
-          },
-          {
-            direction: Direction.LEFT,
-            source: './images/kenji/Attack2.png',
-            scale: 2,
-            framesCount: 4,
-            repeatAnimation: 1,
-            // offset: { left: 80, top: 75, right: 75, bottom: 70 },
-            getHitArea: ({ position }) => ({
-              left: position.x - 20,
-              top: position.y - 40,
-              right: position.x + 20,
-              bottom: position.y + 30,
-            }),
-            getAttackArea: ({ position, framesCurrent, sprite }) => {
-              if (framesCurrent === 1)
-                return {
-                  left: position.x - 20 * (sprite.reversed() ? -1 : 1),
-                  right: position.x + 120 * (sprite.reversed() ? -1 : 1),
-                  top: position.y - 90,
-                  bottom: position.y + 30,
-                };
-            },
-          },
-        ],
-      },
-    );
+    this.player = createPlayer(this.canvas, this.context, this.elements.playerHealth);
+    this.enemy = createEnemy(this.canvas, this.context, this.elements.enemyHealth);
     this.player.setEnemy(this.enemy);
     this.enemy.setEnemy(this.player);
   }
@@ -573,8 +210,9 @@ export class Game {
     if (this.elements.timer) this.elements.timer.innerText = '';
     console.log('end game');
 
-    this.background.resetEffector();
-    this.shop.resetEffector();
+    const effector = this.getRandomCameraMovementEffector();
+    this.background.effector = effector;
+    this.shop.effector = effector;
     this.player?.resetEffector();
     this.enemy?.resetEffector();
   }
