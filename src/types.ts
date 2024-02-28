@@ -1,4 +1,5 @@
 import { Direction } from '@/enums/Direction';
+import Sprite from '@/Sprite';
 
 export type Position = {
   x: number;
@@ -27,4 +28,33 @@ export type ImageAttr = {
   scale: number;
   size?: ImageSize;
   frameClipper: (size: ImageSize, attr: ImageAttr, frame: number) => ImageOffset;
+};
+
+export type CharacterMotion = ImageAttr & {
+  getHitArea?: ({
+    sprite,
+    position,
+    animatedAt,
+    framesCurrent,
+    imageAttr,
+  }: {
+    sprite: Sprite;
+    position: Position;
+    animatedAt: number;
+    framesCurrent: number;
+    imageAttr: ImageAttr;
+  }) => ImageOffset | undefined;
+  getAttackArea?: ({
+    sprite,
+    position,
+    animatedAt,
+    framesCurrent,
+    imageAttr,
+  }: {
+    sprite: Sprite;
+    position: Position;
+    animatedAt: number;
+    framesCurrent: number;
+    imageAttr: ImageAttr;
+  }) => ImageOffset | undefined;
 };

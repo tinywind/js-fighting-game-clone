@@ -1,73 +1,76 @@
-*, *::before, *::after {
-    box-sizing: border-box;
-    user-select: none;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  user-select: none;
 }
 
 .hidden {
-    display: none;
+  display: none !important;
 }
 
 .start-screen {
-    position: absolute;
-    font-size: 5vmin;
-    color: white;
-    font-weight: bold;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+  position: absolute;
+  font-size: 5vmin;
+  color: white;
+  font-weight: bold;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .game-box {
-    position: relative;
-    border: 1px solid #e7e7e7;
+  position: relative;
+  border: 1px solid #e7e7e7;
 }
 
 .indicator-container {
-    position: absolute;
-    display: flex;
-    width: 100%;
+  position: absolute;
+  display: flex;
+  width: 100%;
 }
 
 .health-container {
-    background-color: red;
-    height: 30px;
-    width: calc(50% - 50px);
-    border: 1px solid #e7e7e7;
-    border-radius: 4px;
-    margin: 40px 0;
-    overflow: hidden;
-    position: relative;
+  background-color: red;
+  height: 30px;
+  width: calc(50% - 50px);
+  border: 1px solid #e7e7e7;
+  border-radius: 4px;
+  margin: 40px 0;
+  overflow: hidden;
+  position: relative;
 }
 
-#player-health, #enemy-health {
-    position: absolute;
-    background-color: yellow;
-    top: 0;
-    height: 100%;
+#player-health,
+#enemy-health {
+  position: absolute;
+  background-color: yellow;
+  top: 0;
+  height: 100%;
 }
 
 #player-health {
-    --var: 100%;
-    right: 0;
-    width: var(--var);
+  --var: 100%;
+  right: 0;
+  width: var(--var);
 }
 
 #enemy-health {
-    --var: 100%;
-    left: 0;
-    width: var(--var);
+  --var: 100%;
+  left: 0;
+  width: var(--var);
 }
 
 #timer {
-    background-color: cadetblue;
-    height: 100px;
-    width: 100px;
-    border: 1px solid #e7e7e7;
-    border-radius: 4px;
-    margin: 10px 0;
-    align-content: center;
-    text-align: center;
-    line-height: 100px;
-    font-size: xxx-large;
-    font-weight: bold;
+  background-color: cadetblue;
+  height: 100px;
+  width: 100px;
+  border: 1px solid #e7e7e7;
+  border-radius: 4px;
+  margin: 10px 0;
+  align-content: center;
+  text-align: center;
+  line-height: 100px;
+  font-size: xxx-large;
+  font-weight: bold;
 }

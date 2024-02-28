@@ -1,31 +1,30 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="utf-8"/>
-    <meta name="description" content="Jumping Dinosaur"/>
-    <meta name="keywords" content="jumping, dinosaur, game"/>
-    <meta name="author" content="tinywind"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta name="robots" content="noindex, nofollow"/>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="description" content="Jumping Dinosaur" />
+    <meta name="keywords" content="jumping, dinosaur, game" />
+    <meta name="author" content="tinywind" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <title>Fighting Game</title>
-    <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-<div id="app"></div>
-<script type="module" src="/src/main.ts"></script>
-<div class="game-box">
-    <div class="start-screen" id="start-screen">Press Space to Start</div>
-    <div class="indicator-container">
+    <link rel="stylesheet" type="text/css" href="/styles.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div class="game-box">
+      <div class="start-screen" id="start-screen">Press Space to Start</div>
+      <div class="indicator-container hidden" id="indicator-container">
         <div class="health-container">
-            <div id="player-health"></div>
+          <div id="player-health"></div>
         </div>
         <div id="timer"></div>
         <div class="health-container">
-            <div id="enemy-health"></div>
+          <div id="enemy-health"></div>
         </div>
+      </div>
+      <canvas id="canvas"></canvas>
     </div>
-    <canvas id="canvas"></canvas>
-</div>
-</body>
+  </body>
 </html>

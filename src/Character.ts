@@ -1,10 +1,20 @@
-import { set as setCustomProperty } from './properties';
+import { set as setProperty } from './properties';
 import { CharacterState } from './enums/CharacterState';
 import Sprite from './Sprite';
-import { ATTACK_DELAY, ATTACK_KEEP_MS, CHARACTER_BOTTOM_THRESHOLD, FULL_HEALTH, GRAVITY } from './constants';
-import { ImageAttr, Position } from './types';
+import { ATTACK_DAMAGE, CHARACTER_BOTTOM_THRESHOLD, FULL_HEALTH, GRAVITY } from './constants';
+import { CharacterMotion, ImageOffset, Position } from './types';
 import { CoordinateBasis } from './enums/CoordinateBasis';
 import { Direction } from './enums/Direction';
+
+const convertLeftRight = (value?: ImageOffset) =>
+  !value
+    ? value
+    : {
+        left: value.right > value.left ? value.left : value.right,
+        right: value.right > value.left ? value.right : value.left,
+        top: value.top,
+        bottom: value.bottom,
+      };
 
 export class Character extends Sprite {
   name;
@@ -22,13 +32,15 @@ export class Character extends Sprite {
     canvas: HTMLCanvasElement,
     context: CanvasRenderingContext2D,
     { name, position, healthIndicator }: { name: string; position: Position; healthIndicator?: HTMLElement },
-    images: Record<CharacterState, Partial<ImageAttr>[]>,
+    images: Record<CharacterState, Partial<CharacterMotion>[]>,
   ) {
     super(canvas, context, { position, coordinateBasis: CoordinateBasis.CENTER, imageAttr: images.IDLE[0] });
 
     this.name = name;
     this.healthIndicator = healthIndicator;
     this.images = images;
+
+    healthIndicator && setProperty(healthIndicator, '--var', '100%');
   }
 
   getStateImage(index: number = 0) {
@@ -36,28 +48,11 @@ export class Character extends Sprite {
   }
 
   setState(state: CharacterState) {
-    let frame = this.imageAttr.frameClipper(this.image, this.imageAttr, this.framesCurrent);
-    const x = this.x(frame);
-    const y = this.y(frame);
-    const drawingWidth = this.drawingWidth(frame);
-    const drawingHeight = this.drawingHeight(frame);
-    const preState = this.state;
-
+    if (this.state === state) return;
     this.state = state;
     this.setImage(this.getStateImage());
 
-    frame = this.imageAttr.frameClipper(this.image, this.imageAttr, this.framesCurrent);
-    const changedX = this.x(frame);
-    const changedY = this.x(frame);
-    const changedWidth = this.drawingWidth(frame);
-    const changedHeight = this.drawingHeight(frame);
-
-    if (drawingWidth !== changedWidth || drawingHeight !== changedHeight) {
-      console.log('state before', { state: preState, x, y, width: drawingWidth, height: drawingHeight });
-      console.log('state after', { state, x: changedX, y: changedY, width: changedWidth, height: changedHeight });
-      // if (drawingHeight !== changedHeight) this.position.y += drawingHeight - changedHeight;
-      // if (drawingWidth !== changedWidth && this.reversed()) this.position.x += drawingWidth - changedWidth;
-    }
+    if (this.name === 'player') console.log(`${this.name} state: ${this.state}`);
   }
 
   setEnemy(enemy?: Character) {
@@ -68,6 +63,13 @@ export class Character extends Sprite {
     return this.position.y < CHARACTER_BOTTOM_THRESHOLD;
   }
 
+  attack() {
+    if (this.attackedAt) return;
+    this.lastAttackedAt = this.attackedAt = Date.now();
+    this.setState(CharacterState.ATTACK);
+    if (!this.isJumping()) this.velocity.x = 0;
+  }
+
   jump() {
     if (this.isJumping()) return;
     this.velocity.y = -10;
@@ -76,29 +78,31 @@ export class Character extends Sprite {
   }
 
   moveRight() {
-    if (this.isJumping()) return;
+    if (this.isJumping() || this.isAttacking()) return;
     this.velocity.x = 5;
     this.setState(CharacterState.MOVE);
   }
 
   moveLeft() {
-    if (this.isJumping()) return;
+    if (this.isJumping() || this.isAttacking()) return;
     this.velocity.x = -5;
     this.setState(CharacterState.MOVE);
   }
 
   stopMove() {
-    if (this.isJumping()) return;
+    if (this.isJumping() || this.isAttacking()) return;
     this.velocity.x = 0;
     this.setState(CharacterState.IDLE);
   }
 
   isAttacking() {
-    return this.attackedAt && Date.now() - this.attackedAt > ATTACK_DELAY && Date.now() - this.attackedAt < ATTACK_KEEP_MS;
+    if (this.state !== CharacterState.ATTACK) return false;
+    return this.attackedAt && this.imageAttr.animationDuration && new Date().getTime() - this.attackedAt <= this.imageAttr.animationDuration;
   }
 
   isFinishedAttack() {
-    return this.attackedAt && Date.now() - this.attackedAt > ATTACK_KEEP_MS;
+    if (this.state !== CharacterState.ATTACK) return false;
+    return this.attackedAt && this.imageAttr.animationDuration && new Date().getTime() - this.attackedAt > this.imageAttr.animationDuration;
   }
 
   finishAttack() {
@@ -106,12 +110,6 @@ export class Character extends Sprite {
     if (this.isJumping()) this.setState(this.velocity.y > 0 ? CharacterState.FALL : CharacterState.JUMP);
     else if (this.velocity.x) this.setState(CharacterState.MOVE);
     else this.setState(CharacterState.IDLE);
-  }
-
-  attack() {
-    if (this.attackedAt) return;
-    this.lastAttackedAt = this.attackedAt = Date.now();
-    this.setState(CharacterState.ATTACK);
   }
 
   getDamage(attackId: number, damage: number) {
@@ -122,58 +120,109 @@ export class Character extends Sprite {
 
     if (this.health < 0) this.health = 0;
     // console.log(this.health / FULL_HEALTH * 100, `${this.name} get damage ${damage}, current health: ${this.health}`);
-    if (this.healthIndicator) setCustomProperty(this.healthIndicator, '--var', (this.health / FULL_HEALTH) * 100 + '%');
+    if (this.healthIndicator) setProperty(this.healthIndicator, '--var', (this.health / FULL_HEALTH) * 100 + '%');
 
     if (this.health <= 0) {
       console.log(`${this.name} is dead`);
     }
   }
 
+  getAttackArea() {
+    if (!this.getStateImage().getAttackArea) return;
+    return this.getStateImage().getAttackArea!({
+      sprite: this,
+      position: this.position,
+      animatedAt: this.animatedAt,
+      framesCurrent: this.framesCurrent,
+      imageAttr: this.imageAttr,
+    });
+  }
+
+  getHitArea() {
+    if (!this.getStateImage().getHitArea) return;
+    return this.getStateImage().getHitArea!({
+      sprite: this,
+      position: this.position,
+      animatedAt: this.animatedAt,
+      framesCurrent: this.framesCurrent,
+      imageAttr: this.imageAttr,
+    });
+  }
+
+  limitPosition() {
+    if (this.position.y > CHARACTER_BOTTOM_THRESHOLD) this.position.y = CHARACTER_BOTTOM_THRESHOLD;
+    if (this.position.x < 0) this.position.x = 0;
+    else if (this.position.x > this.canvas.width) this.position.x = this.canvas.width;
+  }
+
+  checkCollision() {
+    if (this.enemy) {
+      this.direction = this.enemy.position.x > this.position.x ? Direction.RIGHT : Direction.LEFT;
+
+      const attackArea = convertLeftRight(this.getAttackArea());
+      const hitArea = convertLeftRight(this.enemy.getHitArea());
+      if (attackArea && hitArea) {
+        console.log('player', this.getHitArea(), 'attackArea', attackArea, 'hitArea', hitArea);
+
+        if (attackArea.left < hitArea.right && attackArea.right > hitArea.left && attackArea.top < hitArea.bottom && attackArea.bottom > hitArea.top) {
+          this.enemy.getDamage(this.lastAttackedAt!, ATTACK_DAMAGE);
+        }
+      }
+    }
+  }
+
+  draw() {
+    super.draw();
+    if (this.getStateImage().getHitArea) {
+      const area = this.getStateImage().getHitArea!({
+        sprite: this,
+        position: this.position,
+        animatedAt: this.animatedAt,
+        framesCurrent: this.framesCurrent,
+        imageAttr: this.imageAttr,
+      });
+      if (area) {
+        this.context.fillStyle = 'rgba(255, 0, 0, 0.5)';
+        this.context.fillRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+      }
+    }
+
+    if (this.getStateImage().getAttackArea) {
+      const area = this.getStateImage().getAttackArea!({
+        sprite: this,
+        position: this.position,
+        animatedAt: this.animatedAt,
+        framesCurrent: this.framesCurrent,
+        imageAttr: this.imageAttr,
+      });
+      if (area) {
+        this.context.fillStyle = 'rgba(0, 0, 255, 0.5)';
+        this.context.fillRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+      }
+    }
+  }
+
   update() {
     super.update();
 
+    this.limitPosition();
+    this.checkCollision();
+
     const isJumping = this.isJumping();
-    const width = this.imageWidth() * this.imageAttr.scale;
-    // const height = this.imageHeight() * this.imageAttr.scale;
 
     if (this.position.y + this.velocity.y > CHARACTER_BOTTOM_THRESHOLD) {
-      // console.log('stop jumping', this.position.y, this.velocity.y, CHARACTER_BOTTOM_THRESHOLD)
       this.velocity.x = 0;
       this.velocity.y = 0;
       this.position.y = CHARACTER_BOTTOM_THRESHOLD;
       this.setState(CharacterState.IDLE);
     } else if (this.isJumping()) {
       this.velocity.y += GRAVITY;
-      if (!this.attackedAt) this.setState(this.velocity.y > 0 ? CharacterState.FALL : CharacterState.JUMP);
-    }
-
-    if (this.position.x + width + this.velocity.x > this.canvas.width || this.position.x + this.velocity.x < 0) {
-      this.velocity.x = 0;
-      this.setState(CharacterState.IDLE);
+      if (!this.isAttacking()) this.setState(this.velocity.y > 0 ? CharacterState.FALL : CharacterState.JUMP);
     }
 
     this.position.x += this.velocity.x;
     this.position.y += this.velocity.y;
 
-    if (this.enemy) {
-      // TODO: 케릭터의 중심을 이미지의 x,y가 아니라 지정된 x,y로 변경하고(image 별로 설정하고), 설정된 x,y를 이미지를 draw하고, direction을 계산한다.
-      // TODO: 변경된 x,y를 기준으로 화면밖으로 나가지 않도록 처리한다.
-      this.direction = this.enemy.position.x > this.position.x ? Direction.RIGHT : Direction.LEFT;
-
-      if (this.isAttacking()) {
-        // const hitRect = this.enemy.hitRect(this.enemy);
-        // const attackRect = this.attackRect(this);
-        //
-        // // console.log('attack', attackRect, hitRect)
-        // if (attackRect.x < hitRect.x + hitRect.width && attackRect.x + attackRect.width > hitRect.x && attackRect.y < hitRect.y + hitRect.height && attackRect.y + attackRect.height > hitRect.y) {
-        //   // console.log(`hit ${this.name} > ${this.enemy.name}`);
-        //   this.enemy.getDamage(this.lastAttackedAt, ATTACK_DAMAGE);
-        // }
-      }
-    }
-
-    if (this.isFinishedAttack() || (isJumping && !this.isJumping())) {
-      this.finishAttack();
-    }
+    if (this.isFinishedAttack() || (isJumping && !this.isJumping())) this.finishAttack();
   }
 }

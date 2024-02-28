@@ -2,6 +2,21 @@ import { Direction } from './enums/Direction';
 import { CoordinateBasis } from './enums/CoordinateBasis';
 import { Position, ImageOffset, ImageSize, ImageAttr } from './types';
 
+const defaultImageAttr = {
+  framesCount: 1,
+  animationDuration: 1000,
+  repeatAnimation: 0,
+  direction: Direction.LEFT,
+  offset: { left: 0, top: 0, right: 0, bottom: 0 },
+  scale: 1,
+  frameClipper: (size: ImageSize, attr: ImageAttr, frame: number) => ({
+    left: (size.width / attr.framesCount) * frame + attr.offset.left,
+    right: (size.width / attr.framesCount) * (frame + 1) - attr.offset.right,
+    top: attr.offset.top,
+    bottom: size.height - attr.offset.bottom,
+  }),
+};
+
 export default class Sprite {
   direction = Direction.LEFT;
   framesCurrent = 0;
@@ -9,22 +24,9 @@ export default class Sprite {
   context;
   position;
   coordinateBasis;
-  image;
+  imageElement;
   animatedAt = new Date().getTime();
-  imageAttr = {
-    framesCount: 1,
-    animationDuration: 1000,
-    repeatAnimation: 0,
-    direction: Direction.LEFT,
-    offset: { left: 0, top: 0, right: 0, bottom: 0 },
-    scale: 1,
-    frameClipper: (size: ImageSize, attr: ImageAttr, frame: number) => ({
-      left: (size.width / attr.framesCount) * frame + attr.offset.left,
-      right: (size.width / attr.framesCount) * (frame + 1) - attr.offset.right,
-      top: attr.offset.top,
-      bottom: size.height - attr.offset.bottom,
-    }),
-  } as ImageAttr;
+  imageAttr: ImageAttr;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -43,25 +45,29 @@ export default class Sprite {
     this.context = context;
     this.position = position || { x: 0, y: 0 };
     this.coordinateBasis = coordinateBasis || CoordinateBasis.LEFT_TOP;
-    this.image = new Image();
+    this.imageElement = new Image();
+    this.imageAttr = { ...defaultImageAttr, source: '' };
     this.setImage(imageAttr);
   }
 
   setImage(imageAttr: Partial<ImageAttr>) {
     if (imageAttr.source === undefined) throw new Error('Image source is required');
-    this.image.src = imageAttr.source;
+    this.imageElement.src = imageAttr.source;
+    // console.log('setImage(imageAttr: Partial<ImageAttr>)');
     this.framesCurrent = 0;
     this.animatedAt = new Date().getTime();
-    for (const key in imageAttr) if ((imageAttr as any)[key]) (this.imageAttr as any)[key] = (imageAttr as any)[key];
+
+    this.imageAttr = { ...defaultImageAttr, source: imageAttr.source! };
+    for (const key in imageAttr) if ((imageAttr as any)[key] !== undefined && (imageAttr as any)[key] !== null) (this.imageAttr as any)[key] = (imageAttr as any)[key];
   }
 
   imageWidth(frame?: ImageOffset) {
-    const imageOffset = frame || this.imageAttr.frameClipper(this.image, this.imageAttr, this.framesCurrent);
+    const imageOffset = frame || this.imageAttr.frameClipper(this.imageElement, this.imageAttr, this.framesCurrent);
     return imageOffset.right - imageOffset.left;
   }
 
   imageHeight(frame?: ImageOffset) {
-    const imageOffset = frame || this.imageAttr.frameClipper(this.image, this.imageAttr, this.framesCurrent);
+    const imageOffset = frame || this.imageAttr.frameClipper(this.imageElement, this.imageAttr, this.framesCurrent);
     return imageOffset.bottom - imageOffset.top;
   }
 
@@ -92,7 +98,7 @@ export default class Sprite {
   }
 
   draw() {
-    const frame = this.imageAttr.frameClipper(this.image, this.imageAttr, this.framesCurrent);
+    const frame = this.imageAttr.frameClipper(this.imageElement, this.imageAttr, this.framesCurrent);
     const imageWidth = this.imageWidth(frame);
     const imageHeight = this.imageHeight(frame);
     const x = this.x(frame);
@@ -101,7 +107,7 @@ export default class Sprite {
     const drawingHeight = this.drawingHeight(frame);
     const reversed = this.reversed();
 
-    if (this.image.src.indexOf('samuraiMack') !== -1 || this.image.src.indexOf('kenji') !== -1) {
+    if (this.imageElement.src.indexOf('samuraiMack') !== -1 || this.imageElement.src.indexOf('kenji') !== -1) {
       // this.context.fillStyle = 'black';
       // this.context.fillRect(x, y, drawingWidth, drawingHeight);
       // console.log('sprite direction', { coordinateBasis: this.coordinateBasis, direction: this.direction, reversed });
@@ -110,7 +116,7 @@ export default class Sprite {
 
     this.context.save();
     if (reversed) this.context.scale(-1, 1);
-    this.context.drawImage(this.image, frame.left, frame.top, imageWidth, imageHeight, reversed ? -x : x, y, reversed ? -drawingWidth : drawingWidth, drawingHeight);
+    this.context.drawImage(this.imageElement, frame.left, frame.top, imageWidth, imageHeight, reversed ? -x : x, y, reversed ? -drawingWidth : drawingWidth, drawingHeight);
     if (reversed) this.context.restore();
   }
 
@@ -122,10 +128,21 @@ export default class Sprite {
       const timePassed = now - this.animatedAt;
 
       if (this.imageAttr.repeatAnimation > 0 && timePassed > this.imageAttr.animationDuration * this.imageAttr.repeatAnimation) {
+        // console.log('this.imageAttr.repeatAnimation > 0 && timePassed > this.imageAttr.animationDuration * this.imageAttr.repeatAnimation');
         this.framesCurrent = 0;
       } else {
         const framePassed = timePassed % this.imageAttr.animationDuration;
         this.framesCurrent = Math.floor(framePassed / (this.imageAttr.animationDuration / this.imageAttr.framesCount));
+
+        /*if (this.image.src.indexOf('samuraiMack') !== -1) {
+                  console.log({
+                    repeatAnimation: this.imageAttr.repeatAnimation,
+                    timePassed,
+                    framePassed,
+                    frameMotionDuration: this.imageAttr.animationDuration / this.imageAttr.framesCount,
+                    framesCurrent: this.framesCurrent,
+                  });
+                }*/
       }
     }
   }

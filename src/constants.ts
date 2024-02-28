@@ -1,9 +1,7 @@
 export const GAME_WIDTH = 1024;
 export const GAME_HEIGHT = 576;
-export const CHARACTER_BOTTOM_THRESHOLD = 445;
+export const CHARACTER_BOTTOM_THRESHOLD = 440;
 export const GRAVITY = 0.25;
-export const ATTACK_DELAY = 100;
-export const ATTACK_KEEP_MS = 1000;
 export const ATTACK_DAMAGE = 20;
 export const FULL_HEALTH = 100;
 export const TIME_LIMIT = 100;
