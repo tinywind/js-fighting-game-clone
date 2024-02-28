@@ -5,3 +5,5 @@ export const GRAVITY = 0.25;
 export const ATTACK_DAMAGE = 20;
 export const FULL_HEALTH = 100;
 export const TIME_LIMIT = 100;
+export const CAMERA_MAX_RATE = 2;
+export const CAMERA_MIN_RATE = 0.75;

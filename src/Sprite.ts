@@ -17,6 +17,16 @@ const defaultImageAttr = {
   }),
 };
 
+type Effector = (sprite: Sprite, value: number) => number;
+
+const defaultEffectorValue: Effector = (_: Sprite, value: number) => value;
+const defaultEffector = {
+  X: defaultEffectorValue,
+  Y: defaultEffectorValue,
+  WIDTH: defaultEffectorValue,
+  HEIGHT: defaultEffectorValue,
+};
+
 export default class Sprite {
   direction = Direction.LEFT;
   framesCurrent = 0;
@@ -24,9 +34,11 @@ export default class Sprite {
   context;
   position;
   coordinateBasis;
-  imageElement;
+  imageElement = new Image();
   animatedAt = new Date().getTime();
-  imageAttr: ImageAttr;
+  imageAttr: ImageAttr = { ...defaultImageAttr, source: '' };
+  origin: { size?: ImageSize; scale: number } = { scale: 1 };
+  effector: Record<'X' | 'Y' | 'WIDTH' | 'HEIGHT', Effector> = defaultEffector;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -45,8 +57,6 @@ export default class Sprite {
     this.context = context;
     this.position = position || { x: 0, y: 0 };
     this.coordinateBasis = coordinateBasis || CoordinateBasis.LEFT_TOP;
-    this.imageElement = new Image();
-    this.imageAttr = { ...defaultImageAttr, source: '' };
     this.setImage(imageAttr);
   }
 
@@ -59,38 +69,51 @@ export default class Sprite {
 
     this.imageAttr = { ...defaultImageAttr, source: imageAttr.source! };
     for (const key in imageAttr) if ((imageAttr as any)[key] !== undefined && (imageAttr as any)[key] !== null) (this.imageAttr as any)[key] = (imageAttr as any)[key];
+    this.origin = { size: this.imageAttr.size, scale: this.imageAttr.scale };
   }
 
-  imageWidth(frame?: ImageOffset) {
+  resetEffector() {
+    this.effector = defaultEffector;
+  }
+
+  imageWidth(frame?: ImageOffset): number {
     const imageOffset = frame || this.imageAttr.frameClipper(this.imageElement, this.imageAttr, this.framesCurrent);
     return imageOffset.right - imageOffset.left;
   }
 
-  imageHeight(frame?: ImageOffset) {
+  imageHeight(frame?: ImageOffset): number {
     const imageOffset = frame || this.imageAttr.frameClipper(this.imageElement, this.imageAttr, this.framesCurrent);
     return imageOffset.bottom - imageOffset.top;
   }
 
-  drawingWidth(frame?: ImageOffset) {
-    return this.imageAttr.size?.width || this.imageWidth(frame) * this.imageAttr.scale;
+  drawingWidth(frame?: ImageOffset): number {
+    const get = () => this.imageAttr.size?.width || this.imageWidth(frame) * this.imageAttr.scale;
+    return this.effector.WIDTH(this, get());
   }
 
-  drawingHeight(frame?: ImageOffset) {
-    return this.imageAttr.size?.height || this.imageHeight(frame) * this.imageAttr.scale;
+  drawingHeight(frame?: ImageOffset): number {
+    const get = () => this.imageAttr.size?.height || this.imageHeight(frame) * this.imageAttr.scale;
+    return this.effector.HEIGHT(this, get());
   }
 
-  x(frame?: ImageOffset) {
-    const drawingWidth = this.drawingWidth(frame);
-    if (this.coordinateBasis === CoordinateBasis.CENTER) return this.position.x - drawingWidth / 2;
-    if (this.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM || this.coordinateBasis === CoordinateBasis.RIGHT_TOP) return this.canvas.width - this.position.x - drawingWidth;
-    return this.position.x;
+  x(frame?: ImageOffset): number {
+    const get = (value: number) => {
+      const drawingWidth = this.drawingWidth(frame);
+      if (this.coordinateBasis === CoordinateBasis.CENTER) return value - drawingWidth / 2;
+      if (this.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM || this.coordinateBasis === CoordinateBasis.RIGHT_TOP) return this.canvas.width - value - drawingWidth;
+      return value;
+    };
+    return get(this.effector.X(this, this.position.x));
   }
 
-  y(frame?: ImageOffset) {
-    const drawingHeight = this.drawingHeight(frame);
-    if (this.coordinateBasis === CoordinateBasis.CENTER) return this.position.y - drawingHeight / 2;
-    if (this.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM || this.coordinateBasis === CoordinateBasis.LEFT_BOTTOM) return this.canvas.height - this.position.y - drawingHeight;
-    return this.position.y;
+  y(frame?: ImageOffset): number {
+    const get = (value: number) => {
+      const drawingHeight = this.drawingHeight(frame);
+      if (this.coordinateBasis === CoordinateBasis.CENTER) return value - drawingHeight / 2;
+      if (this.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM || this.coordinateBasis === CoordinateBasis.LEFT_BOTTOM) return this.canvas.height - value - drawingHeight;
+      return value;
+    };
+    return get(this.effector.Y(this, this.position.y));
   }
 
   reversed() {
@@ -107,17 +130,15 @@ export default class Sprite {
     const drawingHeight = this.drawingHeight(frame);
     const reversed = this.reversed();
 
-    if (this.imageElement.src.indexOf('samuraiMack') !== -1 || this.imageElement.src.indexOf('kenji') !== -1) {
-      // this.context.fillStyle = 'black';
-      // this.context.fillRect(x, y, drawingWidth, drawingHeight);
-      // console.log('sprite direction', { coordinateBasis: this.coordinateBasis, direction: this.direction, reversed });
-      // console.log('draw box', { imageWidth, imageHeight, x, y, drawingWidth, drawingHeight });
-    }
-
     this.context.save();
     if (reversed) this.context.scale(-1, 1);
     this.context.drawImage(this.imageElement, frame.left, frame.top, imageWidth, imageHeight, reversed ? -x : x, y, reversed ? -drawingWidth : drawingWidth, drawingHeight);
     if (reversed) this.context.restore();
+
+    if (this.imageElement.src.indexOf('samuraiMack') !== -1 || this.imageElement.src.indexOf('kenji') !== -1) {
+      // this.context.fillStyle = 'black';
+      // this.context.fillRect(x, y, drawingWidth, drawingHeight);
+    }
   }
 
   update() {
@@ -133,16 +154,6 @@ export default class Sprite {
       } else {
         const framePassed = timePassed % this.imageAttr.animationDuration;
         this.framesCurrent = Math.floor(framePassed / (this.imageAttr.animationDuration / this.imageAttr.framesCount));
-
-        /*if (this.image.src.indexOf('samuraiMack') !== -1) {
-                  console.log({
-                    repeatAnimation: this.imageAttr.repeatAnimation,
-                    timePassed,
-                    framePassed,
-                    frameMotionDuration: this.imageAttr.animationDuration / this.imageAttr.framesCount,
-                    framesCurrent: this.framesCurrent,
-                  });
-                }*/
       }
     }
   }

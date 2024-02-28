@@ -51,8 +51,7 @@ export class Character extends Sprite {
     if (this.state === state) return;
     this.state = state;
     this.setImage(this.getStateImage());
-
-    if (this.name === 'player') console.log(`${this.name} state: ${this.state}`);
+    // if (this.name === 'player') console.log(`${this.name} state: ${this.state}`);
   }
 
   setEnemy(enemy?: Character) {
@@ -121,10 +120,7 @@ export class Character extends Sprite {
     if (this.health < 0) this.health = 0;
     // console.log(this.health / FULL_HEALTH * 100, `${this.name} get damage ${damage}, current health: ${this.health}`);
     if (this.healthIndicator) setProperty(this.healthIndicator, '--var', (this.health / FULL_HEALTH) * 100 + '%');
-
-    if (this.health <= 0) {
-      console.log(`${this.name} is dead`);
-    }
+    if (this.health <= 0) console.log(`${this.name} is dead`);
   }
 
   getAttackArea() {
@@ -162,8 +158,7 @@ export class Character extends Sprite {
       const attackArea = convertLeftRight(this.getAttackArea());
       const hitArea = convertLeftRight(this.enemy.getHitArea());
       if (attackArea && hitArea) {
-        console.log('player', this.getHitArea(), 'attackArea', attackArea, 'hitArea', hitArea);
-
+        // console.log('player', this.getHitArea(), 'attackArea', attackArea, 'hitArea', hitArea);
         if (attackArea.left < hitArea.right && attackArea.right > hitArea.left && attackArea.top < hitArea.bottom && attackArea.bottom > hitArea.top) {
           this.enemy.getDamage(this.lastAttackedAt!, ATTACK_DAMAGE);
         }

@@ -1,4 +1,4 @@
-import { TIME_LIMIT } from './constants';
+import { CAMERA_MAX_RATE, CAMERA_MIN_RATE, GAME_HEIGHT, GAME_WIDTH, TIME_LIMIT } from './constants';
 import Sprite from './Sprite';
 import { set as setProperty } from './properties';
 import { Character } from './Character';
@@ -71,7 +71,7 @@ export class Game {
     });
     this.shop = new Sprite(this.canvas, this.context, {
       coordinateBasis: CoordinateBasis.RIGHT_BOTTOM,
-      position: { x: 100, y: 100 },
+      position: { x: 100, y: 95 },
       imageAttr: {
         source: './images/shop.png',
         scale: 2.5,
@@ -447,6 +447,69 @@ export class Game {
     this.enemy.setEnemy(this.player);
   }
 
+  getRandomCameraMovementEffector() {
+    const cameraMovementStartedAt = new Date().getTime();
+    const cameraMovements = [
+      { origin: { x: GAME_WIDTH, y: GAME_HEIGHT }, targetRate: 1.2, duration: 2000, start: 0, end: 0 },
+      { origin: { x: 0, y: 0 }, targetRate: 1, duration: 2000, start: 0, end: 0 },
+      { origin: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 }, targetRate: 0.9, duration: 2000, start: 0, end: 0 },
+      { origin: { x: 0, y: 0 }, targetRate: 1, duration: 2000, start: 0, end: 0 },
+    ];
+    const cameraLoopDuration = cameraMovements.reduce((acc, cur) => acc + cur.duration, 0);
+    cameraMovements.forEach((movement, index) => {
+      movement.start = cameraMovements.slice(0, index).reduce((acc, cur) => acc + cur.duration, 0);
+      movement.end = cameraMovements.slice(0, index + 1).reduce((acc, cur) => acc + cur.duration, 0);
+    });
+
+    const calculateMovement = () => {
+      const timePassed = (new Date().getTime() - cameraMovementStartedAt) % cameraLoopDuration;
+      const movementIndex = cameraMovements.findIndex(movement => timePassed >= movement.start && timePassed < movement.end);
+      const timePassedInMovement = timePassed - cameraMovements[movementIndex].start;
+      const preMovementIndex = (movementIndex - 1 + cameraMovements.length) % cameraMovements.length;
+      const movement = cameraMovements[movementIndex];
+      const preRate = cameraMovements[preMovementIndex].targetRate;
+      const rate = preRate + (movement.targetRate - preRate) * (timePassedInMovement / movement.duration);
+      const origin = {
+        x: movement.origin.x + (cameraMovements[preMovementIndex].origin.x - movement.origin.x) * (timePassedInMovement / movement.duration),
+        y: movement.origin.y + (cameraMovements[preMovementIndex].origin.y - movement.origin.y) * (timePassedInMovement / movement.duration),
+      };
+      return { origin, rate };
+    };
+
+    return this.makeCameraMovementEffector(calculateMovement);
+  }
+
+  getFollowingCharactersCameraMovementEffector() {
+    const calculateMovement = () => {
+      if (!this.player || !this.enemy) return { origin: { x: 0, y: 0 }, rate: 1 };
+      return {
+        origin: { x: (this.player.position.x + this.enemy.position.x) / 2, y: (this.player.position.y + this.enemy.position.y) / 2 },
+        rate: Math.max(1, Math.min((this.canvas.width / Math.abs(this.player.position.x - this.enemy.position.x)) * CAMERA_MIN_RATE, CAMERA_MAX_RATE)),
+      };
+    };
+
+    return this.makeCameraMovementEffector(calculateMovement);
+  }
+
+  makeCameraMovementEffector(calculateMovement: () => { origin: { x: number; y: number }; rate: number }) {
+    return {
+      X: (sprite: Sprite) => {
+        const { origin, rate } = calculateMovement();
+        return sprite.coordinateBasis === CoordinateBasis.RIGHT_TOP || sprite.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM
+          ? GAME_WIDTH - GAME_WIDTH * rate + sprite.position.x * rate + (origin.x * rate - origin.x)
+          : sprite.position.x * rate - (origin.x * rate - origin.x);
+      },
+      Y: (sprite: Sprite) => {
+        const { origin, rate } = calculateMovement();
+        return sprite.coordinateBasis === CoordinateBasis.LEFT_BOTTOM || sprite.coordinateBasis === CoordinateBasis.RIGHT_BOTTOM
+          ? GAME_HEIGHT - GAME_HEIGHT * rate + sprite.position.y * rate + (origin.y * rate - origin.y)
+          : sprite.position.y * rate - (origin.y * rate - origin.y);
+      },
+      WIDTH: (_: Sprite, value: number) => value * calculateMovement().rate,
+      HEIGHT: (_: Sprite, value: number) => value * calculateMovement().rate,
+    };
+  }
+
   setupKeyEvents() {
     window.addEventListener('keydown', this.keydownEvents);
     window.addEventListener('keyup', this.keyupEvents);
@@ -492,6 +555,12 @@ export class Game {
     this.setupKeyEvents();
     this.startTimer();
     this.animate();
+
+    const effector = this.getFollowingCharactersCameraMovementEffector();
+    this.background.effector = effector;
+    this.shop.effector = effector;
+    if (this.player) this.player.effector = effector;
+    if (this.enemy) this.enemy.effector = effector;
   }
 
   endGame() {
@@ -503,6 +572,11 @@ export class Game {
     this.timer = undefined;
     if (this.elements.timer) this.elements.timer.innerText = '';
     console.log('end game');
+
+    this.background.resetEffector();
+    this.shop.resetEffector();
+    this.player?.resetEffector();
+    this.enemy?.resetEffector();
   }
 
   isFinished() {
@@ -510,10 +584,16 @@ export class Game {
     return this.player.health <= 0 || (this.enemy && this.enemy.health <= 0);
   }
 
+  clearContext() {
+    this.context.fillStyle = 'black';
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
   animate() {
     if (!this.startedAt) return;
 
-    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.clearContext();
     this.background.update();
     this.shop.update();
     this.player?.update();
@@ -528,6 +608,7 @@ export class Game {
   }
 
   animateBackground() {
+    this.clearContext();
     this.background.update();
     this.shop.update();
 

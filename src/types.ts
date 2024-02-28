@@ -1,5 +1,5 @@
-import { Direction } from '@/enums/Direction';
-import Sprite from '@/Sprite';
+import { Direction } from './enums/Direction';
+import Sprite from './Sprite';
 
 export type Position = {
   x: number;
